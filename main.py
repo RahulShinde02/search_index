@@ -6,6 +6,7 @@ import datetime
 from my_stopwords import STOP_WORDS
 import argparse
 import sys
+from collections import deque
 
 folder_path = Path.cwd()
 
@@ -52,26 +53,57 @@ class Document_indexing:
         try:
             reader = PdfReader(filepath)
             for page in reader.pages:
-                text += page.extract_text() + "\n"
+                t = page.extract_text()
+                if t:
+                    text += t + "\n"
         except Exception as e:
             print(f"Error reading PDF {filepath.name}: {e}")
         return text
     
+    def _get_last_index_time(self):
+        """Read the last timestamp if available from the log and return it as a datetime object else return ancient time"""
+        if not self.log.exists():
+            return datetime.datetime.min
+        with open(self.log, "r") as file:
+            ts = deque(file, maxlen=1)
+            ts = ts[0].strip()
+            try:
+                return datetime.datetime.fromisoformat(ts)
+            except ValueError:
+                return datetime.datetime.min
+
     def _read_file(self):
         """Read supported files and return a dict mapping paths to content."""
-        extensions = ['.txt','.md','.pdf']
+        extensions = ['.txt', '.md', '.pdf']
         content_dict = {}
+        last_index_time = self._get_last_index_time()
+        with sqlite3.connect(self.dbname) as con:
+            cursor = con.cursor()
+            cursor.execute("SELECT filepath FROM files")
+            known_paths = {row[0] for row in cursor.fetchall()}
+
         for filepath in self.path.rglob("*"):
-            if filepath.suffix in extensions:
-                if filepath.suffix == '.pdf':
-                    content_dict[filepath.as_posix()] = self._read_pdf(filepath)
+            if filepath.is_file() and filepath.suffix.lower() in extensions:
+                filepath_posix = filepath.as_posix()
+
+                is_path_new = filepath_posix not in known_paths
+
+                file_mtime = datetime.datetime.fromtimestamp(filepath.stat().st_mtime)
+                is_file_edited = file_mtime > last_index_time
+
+                if not is_path_new and not is_file_edited:
+                    continue
+
+                if filepath.suffix.lower() == '.pdf':
+                    content_dict[filepath_posix] = self._read_pdf(filepath)
                 else:
                     try:
-                        content_dict[filepath.as_posix()] = filepath.read_text(encoding='utf-8', errors='ignore')
+                        content_dict[filepath_posix] = filepath.read_text(encoding='utf-8', errors='ignore')
                     except Exception as e:
                         print(f"Error reading {filepath.name}: {e}")
+                        
         return content_dict
-            
+
     def _content_cleaner_indexer(self):
         """Tokenize content, filter stop words, and count word frequencies.
         Returns a dict mapping file paths to a dict of {word: frequency}.
@@ -89,12 +121,10 @@ class Document_indexing:
             
             clean_dict[filepath] = word_counts
             
-        return clean_dict
+        return clean_dict  
 
     def build_index(self):
         """Parse files, build the inverted index, and save to SQLite."""
-        with open (self.log, "w",encoding='utf-8') as file:
-            file.write(f"{datetime.datetime.now()}")            
         cleaned_data = self._content_cleaner_indexer()
         with sqlite3.connect(self.dbname) as con:
             cursor = con.cursor()
@@ -106,7 +136,7 @@ class Document_indexing:
                 cursor.execute("INSERT OR IGNORE INTO files (filepath) VALUES (?)", (filepath,))
                 cursor.execute("SELECT file_id FROM files WHERE filepath = ?", (filepath,))
                 file_id = cursor.fetchone()[0]
-                
+                cursor.execute('DELETE FROM indexes WHERE file_id = ?', (file_id,))
                 for word, freq in word_counts.items():
                     if word not in word_cache:
                         cursor.execute("INSERT OR IGNORE INTO words (word) VALUES (?)", (word,))
@@ -115,13 +145,19 @@ class Document_indexing:
                         word_cache[word] = word_id 
                     else:
                         word_id = word_cache[word]
-                    
+                                        
                     cursor.execute('''
                         INSERT OR REPLACE INTO indexes (word_id, file_id, freq)
                         VALUES (?, ?, ?)
                     ''', (word_id, file_id, freq))
 
             con.commit()
+        print("Optimising and shrinking database file...")
+        with sqlite3.connect(self.dbname) as vacuum_con:
+            vacuum_con.execute("VACUUM")
+        with open (self.log, "a",encoding='utf-8') as file:
+            file.write(f"{datetime.datetime.now()} \n")  
+
         print("Database successfully indexed!")
 
     def _Validate(self):
@@ -131,7 +167,8 @@ class Document_indexing:
             sys.exit(1)
         else:
             with open(self.log, "r") as file:
-                ts = file.read()
+                ts = deque(file, maxlen= 1)
+                ts = ts[0].strip()
                 print(f"last indexing on: {ts}")
 
     def search(self, query_word):

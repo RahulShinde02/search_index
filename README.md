@@ -21,7 +21,7 @@ The code is a CLI-based exploration of these concepts, enabling me to index loca
 
 As I continue to learn, I’m looking at how to make the system more robust:
 
-* **Incremental Updates:** I want to figure out how to track file modifications so that I only process files that have actually changed.
+* **Incremental Updates:** I want to figure out how to track file modifications so that I only process files that have actually changed.  ✅
 * **Ranking Algorithms:** I’m curious about moving beyond simple word counts and into basic relevance ranking  to see how search results can be made more meaningful.
 
 ### How to run it
