@@ -3,7 +3,7 @@ from pypdf import PdfReader
 import re
 from pathlib import Path
 import datetime
-from my_stopwords import STOP_WORDS
+from my_stopwords import STOP_WORDS , exclude_dirs , extensions
 import argparse
 import sys
 from collections import deque
@@ -74,7 +74,6 @@ class Document_indexing:
 
     def _read_file(self):
         """Read supported files and return a dict mapping paths to content."""
-        extensions = ['.txt', '.md', '.pdf']
         content_dict = {}
         last_index_time = self._get_last_index_time()
         with sqlite3.connect(self.dbname) as con:
@@ -83,6 +82,8 @@ class Document_indexing:
             known_paths = {row[0] for row in cursor.fetchall()}
 
         for filepath in self.path.rglob("*"):
+            if any(part in exclude_dirs for part in filepath.parts):
+                continue
             if filepath.is_file() and filepath.suffix.lower() in extensions:
                 filepath_posix = filepath.as_posix()
 
@@ -113,7 +114,6 @@ class Document_indexing:
         
         for filepath, content in content_dict.items():
             raw_words = re.findall(r'\b\w+\b', content.lower())
-            
             word_counts = {}
             for word in raw_words:
                 if word not in STOP_WORDS:

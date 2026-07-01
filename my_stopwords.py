@@ -18,3 +18,7 @@ STOP_WORDS = {
     'mustn', "mustn't", 'needn', "needn't", 'shan', "shan't", 'shouldn', "shouldn't", 
     'wasn', "wasn't", 'weren', "weren't", 'won', "won't", 'wouldn', "wouldn't"
 }
+
+exclude_dirs = {"$RECYCLE.BIN", "uv_cache", ".venv"}
+
+extensions = ['.txt', '.md', '.pdf']
