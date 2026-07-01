@@ -48,10 +48,9 @@ class Document_indexing:
             ''')
             con.commit()
     def _read_pdf(self, filepath):
-        """Extract and return text content from a PDF file using PyMuPDF."""
+        """Extract and return text content from a PDF."""
         text = ""
         try:
-            # PyMuPDF is highly optimized for fast I/O and C-level parsing
             with pymupdf.open(filepath) as doc:
                 for page in doc:
                     text += page.get_text() + "\n"
