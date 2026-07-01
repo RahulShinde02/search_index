@@ -1,5 +1,5 @@
 import sqlite3
-from pypdf import PdfReader
+import pymupdf
 import re
 from pathlib import Path
 import datetime
@@ -48,14 +48,13 @@ class Document_indexing:
             ''')
             con.commit()
     def _read_pdf(self, filepath):
-        """Extract and return text content from a PDF file."""
+        """Extract and return text content from a PDF file using PyMuPDF."""
         text = ""
         try:
-            reader = PdfReader(filepath)
-            for page in reader.pages:
-                t = page.extract_text()
-                if t:
-                    text += t + "\n"
+            # PyMuPDF is highly optimized for fast I/O and C-level parsing
+            with pymupdf.open(filepath) as doc:
+                for page in doc:
+                    text += page.get_text() + "\n"
         except Exception as e:
             print(f"Error reading PDF {filepath.name}: {e}")
         return text
@@ -125,6 +124,7 @@ class Document_indexing:
 
     def build_index(self):
         """Parse files, build the inverted index, and save to SQLite."""
+        start = datetime.datetime.now()
         cleaned_data = self._content_cleaner_indexer()
         with sqlite3.connect(self.dbname) as con:
             cursor = con.cursor()
@@ -159,6 +159,9 @@ class Document_indexing:
             file.write(f"{datetime.datetime.now()} \n")  
 
         print("Database successfully indexed!")
+        time_taken = datetime.datetime.now() - start
+        time_taken = time_taken.seconds
+        print(f"took {time_taken} seconds")
 
     def _Validate(self):
         """Verify that the directory has been indexed."""
